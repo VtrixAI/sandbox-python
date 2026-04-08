@@ -272,7 +272,7 @@ class Sandbox:
         Returns a dict with keys ``cpuUsedPct`` and ``memUsedMiB``.
         """
         resp = self._mgmt_client.get(
-            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/metrics",
+            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/exec/metrics",
             timeout=self._config.request_timeout,
         )
         _raise_for_status(resp.status_code, resp.json() if resp.content else {})
@@ -400,7 +400,7 @@ class Sandbox:
         url_base = _resolve_base_url(base_url)
         client = httpx.Client(headers=_mgmt_headers(key), timeout=30.0)
         try:
-            resp = client.get(url_base + "/api/v1/sandboxes/" + sandbox_id + "/metrics")
+            resp = client.get(url_base + "/api/v1/sandboxes/" + sandbox_id + "/exec/metrics")
             _raise_for_status(resp.status_code, resp.json() if resp.content else {})
             data = resp.json()
             return data
@@ -583,7 +583,7 @@ class AsyncSandbox:
     async def get_metrics(self) -> dict:
         """Fetch current CPU and memory usage for the sandbox."""
         resp = await self._mgmt_client.get(
-            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/metrics",
+            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/exec/metrics",
             timeout=self._config.request_timeout,
         )
         _raise_for_status(resp.status_code, resp.json() if resp.content else {})
@@ -709,7 +709,7 @@ class AsyncSandbox:
         url_base = _resolve_base_url(base_url)
         client = httpx.AsyncClient(headers=_mgmt_headers(key), timeout=30.0)
         try:
-            resp = await client.get(url_base + "/api/v1/sandboxes/" + sandbox_id + "/metrics")
+            resp = await client.get(url_base + "/api/v1/sandboxes/" + sandbox_id + "/exec/metrics")
             _raise_for_status(resp.status_code, resp.json() if resp.content else {})
             return resp.json()
         finally:
