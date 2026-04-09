@@ -3,8 +3,11 @@ Filesystem e2e tests — synchronous (Filesystem) and async (AsyncFilesystem).
 """
 from __future__ import annotations
 
+import asyncio
 import platform
 import time
+import threading
+from typing import List
 
 import pytest
 import pytest_asyncio
@@ -270,3 +273,148 @@ class TestFilesystemAsync:
         ]
         await async_sb.files.write_files(files)
         assert await async_sb.files.read(_path("async_batch_a.txt"), format="text") == "async A"
+
+    async def test_read_stream_format(self, async_sb: AsyncSandbox) -> None:
+        path = _path("async_stream.txt")
+        content = "async stream content"
+        await async_sb.files.write(path, content)
+        result = await async_sb.files.read(path, format="stream")
+        assert bytes(result).decode() == content
+
+    async def test_read_stream_large_file(self, async_sb: AsyncSandbox) -> None:
+        path = _path("async_stream_large.bin")
+        data = bytes(range(256)) * 4096  # 1 MiB
+        await async_sb.files.write(path, data)
+        result = await async_sb.files.read(path, format="stream")
+        assert bytes(result) == data
+
+    async def test_watch_dir(self, async_sb: AsyncSandbox) -> None:
+        watch_path = _path("async_watch")
+        await async_sb.files.make_dir(watch_path)
+
+        handle = await async_sb.files.watch_dir(watch_path)
+        await asyncio.sleep(0.2)
+        await async_sb.files.write(watch_path + "/async_watched.txt", "trigger")
+        await asyncio.sleep(0.5)
+
+        events = await handle.get_new_events()
+        await handle.stop()
+        assert len(events) > 0, "AsyncWatchDir: no events received"
+
+    async def test_watch_dir_stop(self, async_sb: AsyncSandbox) -> None:
+        watch_path = _path("async_watch_stop")
+        await async_sb.files.make_dir(watch_path)
+
+        handle = await async_sb.files.watch_dir(watch_path)
+        await asyncio.sleep(0.2)
+        await async_sb.files.write(watch_path + "/before.txt", "before")
+        await asyncio.sleep(0.4)
+        assert len(await handle.get_new_events()) > 0, "expected pre-stop event"
+
+        await handle.stop()
+        await handle.get_new_events()  # drain
+
+        await async_sb.files.write(watch_path + "/after.txt", "after")
+        await asyncio.sleep(0.4)
+        assert len(await handle.get_new_events()) == 0, "events received after stop"
+
+    async def test_watch_dir_recursive(self, async_sb: AsyncSandbox) -> None:
+        watch_path = _path("async_watch_recursive")
+        sub_path = watch_path + "/subdir"
+        await async_sb.files.make_dir(sub_path)
+
+        handle = await async_sb.files.watch_dir(watch_path, recursive=True)
+        await asyncio.sleep(0.2)
+        await async_sb.files.write(sub_path + "/nested.txt", "nested trigger")
+        await asyncio.sleep(0.5)
+
+        events = await handle.get_new_events()
+        await handle.stop()
+        assert len(events) > 0, "AsyncWatchDir recursive: no events for nested file"
+
+
+# ===========================================================================
+# Sync: read(format="stream") + watch_dir extras
+# ===========================================================================
+
+
+class TestFilesystemSyncExtras:
+
+    def test_read_stream_format(self, sb: Sandbox) -> None:
+        path = _path("stream.txt")
+        content = "stream content check"
+        sb.files.write(path, content)
+        chunks = list(sb.files.read(path, format="stream"))
+        assert b"".join(chunks).decode() == content
+
+    def test_read_stream_large_file(self, sb: Sandbox) -> None:
+        path = _path("stream_large.bin")
+        data = bytes(range(256)) * 4096  # 1 MiB
+        sb.files.write(path, data)
+        chunks = list(sb.files.read(path, format="stream"))
+        assert b"".join(chunks) == data
+
+    def test_read_stream_not_found(self, sb: Sandbox) -> None:
+        with pytest.raises(Exception):
+            list(sb.files.read("/tmp/py_stream_notexist_xyz.txt", format="stream"))
+
+    def test_watch_dir_on_exit_callback(self, sb: Sandbox) -> None:
+        watch_path = _path("watch_on_exit")
+        sb.files.make_dir(watch_path)
+
+        exited = threading.Event()
+        handle = sb.files.watch_dir(watch_path, on_exit=lambda: exited.set())
+        time.sleep(0.2)
+
+        # Signal stop, then keep writing files so the SSE thread receives an
+        # event, sees stop_event is set, breaks, and calls on_exit.
+        handle._stop_event.set()
+
+        def _unblock():
+            for i in range(10):
+                time.sleep(0.3)
+                try:
+                    sb.files.write(watch_path + f"/unblock_{i}.txt", "unblock")
+                except Exception:
+                    pass
+                if exited.is_set():
+                    break
+
+        t = threading.Thread(target=_unblock, daemon=True)
+        t.start()
+
+        assert exited.wait(timeout=10), "on_exit callback not called after stop()"
+        handle._thread.join(timeout=2)
+
+    def test_watch_dir_recursive(self, sb: Sandbox) -> None:
+        watch_path = _path("watch_recursive")
+        sub_path = watch_path + "/subdir"
+        sb.files.make_dir(sub_path)
+
+        handle = sb.files.watch_dir(watch_path, recursive=True)
+        time.sleep(0.2)
+        sb.files.write(sub_path + "/nested.txt", "nested")
+        time.sleep(0.5)
+
+        events = handle.get_new_events()
+        handle.stop()
+        assert len(events) > 0, "WatchDir recursive: no events for nested file"
+
+    def test_user_param_home_resolution(self, sb: Sandbox) -> None:
+        # user param causes nano to resolve ~/... paths relative to /home/<user>
+        # Write to an absolute path, confirm user param doesn't break absolute paths.
+        path = _path("user_param.txt")
+        sb.files.write(path, "user param test", user="testuser")
+        got = sb.files.read(path, format="text", user="testuser")
+        assert got == "user param test"
+
+    def test_user_param_tilde_path(self, sb: Sandbox) -> None:
+        # ~/file.txt with user="root" → /root/file.txt (root always exists in sandbox)
+        try:
+            sb.files.write("~/e2e_user_tilde.txt", "tilde content", user="root")
+        except Exception:
+            pytest.skip("tilde path resolution not supported in this sandbox environment")
+        got = sb.files.read("~/e2e_user_tilde.txt", format="text", user="root")
+        assert got == "tilde content"
+        info = sb.files.get_info("/root/e2e_user_tilde.txt")
+        assert info.name == "e2e_user_tilde.txt"

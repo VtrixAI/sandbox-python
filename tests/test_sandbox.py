@@ -153,6 +153,41 @@ class TestSandboxAtlasMethods:
         finally:
             sb.kill()
 
+    def test_resize_disk(self) -> None:
+        sb = Sandbox.create(**_ATLAS_OPTS)
+        try:
+            sb.resize_disk(2048)  # expand to 2 GiB — should not raise
+        finally:
+            sb.kill()
+
+    def test_static_kill_sandbox(self) -> None:
+        sb = Sandbox.create(**_ATLAS_OPTS)
+        Sandbox.kill_sandbox(sb.sandbox_id, **{k: v for k, v in _ATLAS_OPTS.items()})
+
+    def test_static_get_sandbox_info(self) -> None:
+        sb = Sandbox.create(**_ATLAS_OPTS)
+        try:
+            info = Sandbox.get_sandbox_info(sb.sandbox_id, **{k: v for k, v in _ATLAS_OPTS.items()})
+            assert info.sandbox_id == sb.sandbox_id
+            assert info.state
+        finally:
+            sb.kill()
+
+    def test_static_set_sandbox_timeout(self) -> None:
+        sb = Sandbox.create(**_ATLAS_OPTS)
+        try:
+            Sandbox.set_sandbox_timeout(sb.sandbox_id, 120, **{k: v for k, v in _ATLAS_OPTS.items()})
+        finally:
+            sb.kill()
+
+    def test_static_get_sandbox_metrics(self) -> None:
+        sb = Sandbox.create(**_ATLAS_OPTS)
+        try:
+            metrics = Sandbox.get_sandbox_metrics(sb.sandbox_id, **{k: v for k, v in _ATLAS_OPTS.items()})
+            assert isinstance(metrics, dict)
+        finally:
+            sb.kill()
+
 
 @_NEEDS_ATLAS
 @pytest.mark.asyncio
@@ -196,3 +231,39 @@ class TestAsyncSandboxAtlasMethods:
             assert "signature" in url
         finally:
             await sb.kill()
+
+    async def test_resize_disk(self) -> None:
+        sb = await AsyncSandbox.create(**_ATLAS_OPTS)
+        try:
+            await sb.resize_disk(2048)
+        finally:
+            await sb.kill()
+
+    async def test_static_kill_sandbox(self) -> None:
+        sb = await AsyncSandbox.create(**_ATLAS_OPTS)
+        await AsyncSandbox.kill_sandbox(sb.sandbox_id, **{k: v for k, v in _ATLAS_OPTS.items()})
+
+    async def test_static_get_sandbox_info(self) -> None:
+        sb = await AsyncSandbox.create(**_ATLAS_OPTS)
+        try:
+            info = await AsyncSandbox.get_sandbox_info(sb.sandbox_id, **{k: v for k, v in _ATLAS_OPTS.items()})
+            assert info.sandbox_id == sb.sandbox_id
+            assert info.state
+        finally:
+            await sb.kill()
+
+    async def test_static_set_sandbox_timeout(self) -> None:
+        sb = await AsyncSandbox.create(**_ATLAS_OPTS)
+        try:
+            await AsyncSandbox.set_sandbox_timeout(sb.sandbox_id, 120, **{k: v for k, v in _ATLAS_OPTS.items()})
+        finally:
+            await sb.kill()
+
+    async def test_static_get_sandbox_metrics(self) -> None:
+        sb = await AsyncSandbox.create(**_ATLAS_OPTS)
+        try:
+            metrics = await AsyncSandbox.get_sandbox_metrics(sb.sandbox_id, **{k: v for k, v in _ATLAS_OPTS.items()})
+            assert isinstance(metrics, dict)
+        finally:
+            await sb.kill()
+

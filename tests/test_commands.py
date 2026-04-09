@@ -366,3 +366,144 @@ class TestCommandsAsync:
             assert result is not None
         except CommandExitException as e:
             assert e.exit_code != 0
+
+
+# ===========================================================================
+# on_stdout / on_stderr callbacks
+# ===========================================================================
+
+
+class TestCommandsCallbacks:
+
+    def test_run_on_stdout_callback(self, sb: Sandbox) -> None:
+        collected: list[str] = []
+        result = sb.commands.run(
+            "echo 'cb_stdout_line'",
+            on_stdout=lambda line: collected.append(line),
+        )
+        assert "cb_stdout_line" in result.stdout
+        assert any("cb_stdout_line" in s for s in collected), (
+            f"on_stdout callback not called; collected={collected}"
+        )
+
+    def test_run_on_stderr_callback(self, sb: Sandbox) -> None:
+        collected: list[str] = []
+        result = sb.commands.run(
+            "echo 'cb_stderr_line' >&2",
+            on_stderr=lambda line: collected.append(line),
+        )
+        assert "cb_stderr_line" in result.stderr
+        assert any("cb_stderr_line" in s for s in collected), (
+            f"on_stderr callback not called; collected={collected}"
+        )
+
+    def test_run_both_callbacks(self, sb: Sandbox) -> None:
+        out_lines: list[str] = []
+        err_lines: list[str] = []
+        sb.commands.run(
+            "echo 'both_out'; echo 'both_err' >&2",
+            on_stdout=lambda l: out_lines.append(l),
+            on_stderr=lambda l: err_lines.append(l),
+        )
+        assert any("both_out" in l for l in out_lines)
+        assert any("both_err" in l for l in err_lines)
+
+
+@pytest.mark.asyncio
+class TestCommandsAsyncCallbacks:
+
+    async def test_run_on_stdout_callback(self, async_sb: AsyncSandbox) -> None:
+        collected: list[str] = []
+        result = await async_sb.commands.run(
+            "echo 'async_cb_stdout'",
+            on_stdout=lambda line: collected.append(line),
+        )
+        assert "async_cb_stdout" in result.stdout
+        assert any("async_cb_stdout" in s for s in collected)
+
+    async def test_run_on_stderr_callback(self, async_sb: AsyncSandbox) -> None:
+        collected: list[str] = []
+        result = await async_sb.commands.run(
+            "echo 'async_cb_stderr' >&2",
+            on_stderr=lambda line: collected.append(line),
+        )
+        assert "async_cb_stderr" in result.stderr
+        assert any("async_cb_stderr" in s for s in collected)
+
+
+# ===========================================================================
+# CommandHandle.__iter__ / AsyncCommandHandle.__aiter__
+# ===========================================================================
+
+
+class TestCommandHandleIter:
+
+    def test_iter_yields_sse_dicts(self, sb: Sandbox) -> None:
+        handle = sb.commands.run("echo 'iter_output'", background=True)
+        time.sleep(0.1)
+
+        events: list[dict] = []
+        for d in handle:
+            events.append(d)
+            ev = d.get("event", {})
+            if "end" in ev or "start" in ev:
+                break
+
+        assert len(events) > 0, "CommandHandle.__iter__ yielded no events"
+        event_keys = {k for d in events for k in d.get("event", {}).keys()}
+        assert event_keys & {"start", "data", "end", "keepalive"}, (
+            f"Unexpected event keys: {event_keys}"
+        )
+
+    def test_iter_contains_stdout(self, sb: Sandbox) -> None:
+        import base64
+        handle = sb.commands.run("echo 'iter_stdout_check'", background=True)
+        time.sleep(0.1)
+
+        stdout_found = False
+        for d in handle:
+            ev = d.get("event", {})
+            data = ev.get("data", {})
+            if "stdout" in data:
+                decoded = base64.b64decode(data["stdout"]).decode()
+                if "iter_stdout_check" in decoded:
+                    stdout_found = True
+            if "end" in ev:
+                break
+
+        assert stdout_found, "CommandHandle.__iter__ did not yield stdout event"
+
+
+@pytest.mark.asyncio
+class TestCommandHandleAiter:
+
+    async def test_aiter_yields_sse_dicts(self, async_sb: AsyncSandbox) -> None:
+        handle = await async_sb.commands.run("echo 'aiter_output'", background=True)
+        await asyncio.sleep(0.1)
+
+        events: list[dict] = []
+        async for d in handle:
+            events.append(d)
+            ev = d.get("event", {})
+            if "end" in ev or "start" in ev:
+                break
+
+        assert len(events) > 0, "AsyncCommandHandle.__aiter__ yielded no events"
+
+    async def test_aiter_contains_stdout(self, async_sb: AsyncSandbox) -> None:
+        import base64
+        handle = await async_sb.commands.run("echo 'aiter_stdout_check'", background=True)
+        await asyncio.sleep(0.1)
+
+        stdout_found = False
+        async for d in handle:
+            ev = d.get("event", {})
+            data = ev.get("data", {})
+            if "stdout" in data:
+                decoded = base64.b64decode(data["stdout"]).decode()
+                if "aiter_stdout_check" in decoded:
+                    stdout_found = True
+            if "end" in ev:
+                break
+
+        assert stdout_found, "AsyncCommandHandle.__aiter__ did not yield stdout event"
