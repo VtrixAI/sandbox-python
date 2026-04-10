@@ -9,8 +9,8 @@ Management API is served by the hermes gateway:
   POST   /api/v1/sandboxes/:id/timeout
   POST   /api/v1/sandboxes/:id/connect
 
-All sandbox RPC calls (envd) are routed through hermes at:
-  /api/v1/sandboxes/:id/<rpc-path>
+Sandbox RPC calls (envd) go directly to the nano-executor using the envdUrl
+returned by Atlas. The URL format is https://{port}-{sandbox_id}.{envd_domain}.
 """
 
 from __future__ import annotations
@@ -67,15 +67,6 @@ def _sandbox_info_from_dict(d: dict) -> SandboxInfo:
         metadata=d.get("metadata") or {},
         state=d.get("status") or d.get("state", "running"),
     )
-
-
-def _envd_url(base_url: str, sandbox_id: str) -> str:
-    """Build the envd URL routed through hermes.
-
-    The /exec suffix tells hermes to strip it and forward to the nano-executor,
-    while leaving /api/v1/sandboxes/:id/* (no /exec) transparently proxied to Atlas.
-    """
-    return base_url + "/api/v1/sandboxes/" + sandbox_id + "/exec"
 
 
 def _mb_to_storage_size(size_mb: int) -> str:
@@ -170,9 +161,12 @@ class Sandbox:
             data = resp.json()
             sandbox_id = data.get("sandboxID") or data.get("id", "")
             access_token = data.get("envdAccessToken") or data.get("accessToken")
+            envd_url = data.get("envdUrl") or data.get("envd_url") or ""
+            if not envd_url:
+                raise RuntimeError("sandbox has no envdUrl: envd_base_domain is not configured on the server")
             config = ConnectionConfig(
                 sandbox_id=sandbox_id,
-                envd_url=_envd_url(url_base, sandbox_id),
+                envd_url=envd_url,
                 access_token=access_token,
                 api_key=key,
                 base_url=url_base,
@@ -207,11 +201,15 @@ class Sandbox:
                 _raise_for_status(resume_resp.status_code, resume_resp.json() if resume_resp.content else {})
                 resume_data = resume_resp.json()
                 access_token = resume_data.get("envdAccessToken") or resume_data.get("accessToken")
+                envd_url = resume_data.get("envdUrl") or resume_data.get("envd_url") or ""
             else:
                 access_token = data.get("envdAccessToken") or data.get("accessToken")
+                envd_url = data.get("envdUrl") or data.get("envd_url") or ""
+            if not envd_url:
+                raise RuntimeError("sandbox has no envdUrl: envd_base_domain is not configured on the server")
             config = ConnectionConfig(
                 sandbox_id=sandbox_id,
-                envd_url=_envd_url(url_base, sandbox_id),
+                envd_url=envd_url,
                 access_token=access_token,
                 api_key=key,
                 base_url=url_base,
@@ -488,9 +486,12 @@ class AsyncSandbox:
             data = resp.json()
             sandbox_id = data.get("sandboxID") or data.get("id", "")
             access_token = data.get("envdAccessToken") or data.get("accessToken")
+            envd_url = data.get("envdUrl") or data.get("envd_url") or ""
+            if not envd_url:
+                raise RuntimeError("sandbox has no envdUrl: envd_base_domain is not configured on the server")
             config = ConnectionConfig(
                 sandbox_id=sandbox_id,
-                envd_url=_envd_url(url_base, sandbox_id),
+                envd_url=envd_url,
                 access_token=access_token,
                 api_key=key,
                 base_url=url_base,
@@ -525,11 +526,15 @@ class AsyncSandbox:
                 _raise_for_status(resume_resp.status_code, resume_resp.json() if resume_resp.content else {})
                 resume_data = resume_resp.json()
                 access_token = resume_data.get("envdAccessToken") or resume_data.get("accessToken")
+                envd_url = resume_data.get("envdUrl") or resume_data.get("envd_url") or ""
             else:
                 access_token = data.get("envdAccessToken") or data.get("accessToken")
+                envd_url = data.get("envdUrl") or data.get("envd_url") or ""
+            if not envd_url:
+                raise RuntimeError("sandbox has no envdUrl: envd_base_domain is not configured on the server")
             config = ConnectionConfig(
                 sandbox_id=sandbox_id,
-                envd_url=_envd_url(url_base, sandbox_id),
+                envd_url=envd_url,
                 access_token=access_token,
                 api_key=key,
                 base_url=url_base,

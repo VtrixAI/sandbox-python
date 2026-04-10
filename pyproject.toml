@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vtrix-sandbox"
-version = "0.1.2"
+version = "0.1.3"
 description = "Vtrix sandbox SDK — async Python client for Vtrix sandbox environments"
 readme = "README.md"
 license = { text = "MIT" }
