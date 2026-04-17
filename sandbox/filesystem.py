@@ -547,6 +547,35 @@ class Filesystem:
         return handle
 
 
+    def read_file_v2(self, path: str, request_timeout: Optional[float] = None) -> bytes:
+        """Read raw file bytes via the v2 agent-friendly API (GET /v2/file)."""
+        t = request_timeout if request_timeout is not None else self._config.request_timeout
+        resp = self._client.get(
+            self._config.envd_url.rstrip("/") + "/v2/file",
+            params={"path": path},
+            headers=self._headers(),
+            timeout=t,
+        )
+        _raise_for_status(resp.status_code, resp.json() if resp.content and resp.headers.get("content-type", "").startswith("application/json") else {})
+        return resp.content
+
+    def write_file_v2(self, path: str, data: bytes, request_timeout: Optional[float] = None) -> None:
+        """Write data to a file via the v2 agent-friendly API (POST /v2/file).
+
+        Parent directories are created automatically. Returns on 204 No Content.
+        """
+        t = request_timeout if request_timeout is not None else self._config.request_timeout
+        resp = self._client.post(
+            self._config.envd_url.rstrip("/") + "/v2/file",
+            params={"path": path},
+            content=data,
+            headers={**self._headers(), "Content-Type": "application/octet-stream"},
+            timeout=t,
+        )
+        if resp.status_code not in (200, 204):
+            _raise_for_status(resp.status_code, resp.json() if resp.content else {})
+
+
 # ---------------------------------------------------------------------------
 # AsyncFilesystem
 # ---------------------------------------------------------------------------
@@ -881,3 +910,28 @@ class AsyncFilesystem:
         task = asyncio.ensure_future(_worker())
         handle._set_task(task)
         return handle
+
+    async def read_file_v2(self, path: str, request_timeout: Optional[float] = None) -> bytes:
+        """Read raw file bytes via the v2 agent-friendly API (GET /v2/file)."""
+        t = request_timeout if request_timeout is not None else self._config.request_timeout
+        resp = await self._client.get(
+            self._config.envd_url.rstrip("/") + "/v2/file",
+            params={"path": path},
+            headers=self._headers(),
+            timeout=t,
+        )
+        _raise_for_status(resp.status_code, resp.json() if resp.content and resp.headers.get("content-type", "").startswith("application/json") else {})
+        return resp.content
+
+    async def write_file_v2(self, path: str, data: bytes, request_timeout: Optional[float] = None) -> None:
+        """Write data to a file via the v2 agent-friendly API (POST /v2/file)."""
+        t = request_timeout if request_timeout is not None else self._config.request_timeout
+        resp = await self._client.post(
+            self._config.envd_url.rstrip("/") + "/v2/file",
+            params={"path": path},
+            content=data,
+            headers={**self._headers(), "Content-Type": "application/octet-stream"},
+            timeout=t,
+        )
+        if resp.status_code not in (200, 204):
+            _raise_for_status(resp.status_code, resp.json() if resp.content else {})

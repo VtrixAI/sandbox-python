@@ -140,6 +140,7 @@ class Sandbox:
         timeout: int = 300,
         metadata: Optional[Dict[str, str]] = None,
         envs: Optional[Dict[str, str]] = None,
+        workspace_id: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
     ) -> "Sandbox":
@@ -148,15 +149,15 @@ class Sandbox:
         url_base = _resolve_base_url(base_url)
         client = httpx.Client(headers=_mgmt_headers(key), timeout=30.0)
         try:
-            resp = client.post(
-                url_base + "/api/v1/sandboxes",
-                json={
-                    "templateID": template,
-                    "timeout": timeout,
-                    "metadata": metadata or {},
-                    "envVars": envs or {},
-                },
-            )
+            body: dict = {
+                "templateID": template,
+                "timeout": timeout,
+                "metadata": metadata or {},
+                "envVars": envs or {},
+            }
+            if workspace_id:
+                body["workspaceId"] = workspace_id
+            resp = client.post(url_base + "/api/v1/sandboxes", json=body)
             _raise_for_status(resp.status_code, resp.json() if resp.content else {})
             data = resp.json()
             sandbox_id = data.get("sandboxID") or data.get("id", "")
@@ -503,6 +504,7 @@ class AsyncSandbox:
         timeout: int = 300,
         metadata: Optional[Dict[str, str]] = None,
         envs: Optional[Dict[str, str]] = None,
+        workspace_id: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
     ) -> "AsyncSandbox":
@@ -510,15 +512,15 @@ class AsyncSandbox:
         url_base = _resolve_base_url(base_url)
         client = httpx.AsyncClient(headers=_mgmt_headers(key), timeout=30.0)
         try:
-            resp = await client.post(
-                url_base + "/api/v1/sandboxes",
-                json={
-                    "templateID": template,
-                    "timeout": timeout,
-                    "metadata": metadata or {},
-                    "envVars": envs or {},
-                },
-            )
+            body: dict = {
+                "templateID": template,
+                "timeout": timeout,
+                "metadata": metadata or {},
+                "envVars": envs or {},
+            }
+            if workspace_id:
+                body["workspaceId"] = workspace_id
+            resp = await client.post(url_base + "/api/v1/sandboxes", json=body)
             _raise_for_status(resp.status_code, resp.json() if resp.content else {})
             data = resp.json()
             sandbox_id = data.get("sandboxID") or data.get("id", "")

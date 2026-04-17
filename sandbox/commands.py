@@ -862,10 +862,51 @@ class Commands:
             timeout=t,
         )
 
+    def get_result(self, cmd_id: str, request_timeout: Optional[float] = None) -> dict:
+        """Fetch structured output for a completed process by *cmdId*.
 
-# ---------------------------------------------------------------------------
-# AsyncCommands
-# ---------------------------------------------------------------------------
+        Call after receiving the ``end`` SSE event from :meth:`run`.
+        Returns a dict with ``exitCode``, ``stdout``, ``stderr``, ``startedAtUnix``.
+        """
+        url = self._url("process.Process/GetResult")
+        t = request_timeout if request_timeout is not None else self._config.request_timeout
+        resp = self._client.post(url, json={"cmdId": cmd_id}, headers=self._headers(), timeout=t)
+        _raise_for_status(resp.status_code, resp.json() if resp.content else {})
+        return resp.json()
+
+    def run_v2(
+        self,
+        cmd: str,
+        cwd: Optional[str] = None,
+        env: Optional[Dict[str, str]] = None,
+        timeout: Optional[float] = None,
+        stdin: Optional[str] = None,
+        request_timeout: Optional[float] = None,
+    ) -> dict:
+        """Execute a command synchronously via the v2 agent-friendly API (POST /v2/run).
+
+        No Connect header required. Returns dict with ``stdout``, ``stderr``,
+        ``exit_code``, ``duration_ms``, and optionally ``error``.
+        """
+        body: dict = {"cmd": cmd}
+        if cwd:
+            body["cwd"] = cwd
+        if env:
+            body["env"] = env
+        if timeout is not None:
+            body["timeout"] = timeout
+        if stdin is not None:
+            body["stdin"] = stdin
+        t = request_timeout if request_timeout is not None else self._config.request_timeout
+        base = self._config.envd_url.rstrip("/")
+        resp = self._client.post(
+            base + "/v2/run",
+            json=body,
+            headers=self._headers(),
+            timeout=t,
+        )
+        _raise_for_status(resp.status_code, resp.json() if resp.content else {})
+        return resp.json()
 
 
 class AsyncCommands:
@@ -1166,6 +1207,42 @@ class AsyncCommands:
             headers=self._headers(),
             timeout=t,
         )
+
+    async def get_result(self, cmd_id: str, request_timeout: Optional[float] = None) -> dict:
+        """Fetch structured output for a completed process by *cmdId*.
+
+        Returns a dict with ``exitCode``, ``stdout``, ``stderr``, ``startedAtUnix``.
+        """
+        url = self._url("process.Process/GetResult")
+        t = request_timeout if request_timeout is not None else self._config.request_timeout
+        resp = await self._client.post(url, json={"cmdId": cmd_id}, headers=self._headers(), timeout=t)
+        _raise_for_status(resp.status_code, resp.json() if resp.content else {})
+        return resp.json()
+
+    async def run_v2(
+        self,
+        cmd: str,
+        cwd: Optional[str] = None,
+        env: Optional[Dict[str, str]] = None,
+        timeout: Optional[float] = None,
+        stdin: Optional[str] = None,
+        request_timeout: Optional[float] = None,
+    ) -> dict:
+        """Execute a command synchronously via the v2 agent-friendly API (POST /v2/run)."""
+        body: dict = {"cmd": cmd}
+        if cwd:
+            body["cwd"] = cwd
+        if env:
+            body["env"] = env
+        if timeout is not None:
+            body["timeout"] = timeout
+        if stdin is not None:
+            body["stdin"] = stdin
+        t = request_timeout if request_timeout is not None else self._config.request_timeout
+        base = self._config.envd_url.rstrip("/")
+        resp = await self._client.post(base + "/v2/run", json=body, headers=self._headers(), timeout=t)
+        _raise_for_status(resp.status_code, resp.json() if resp.content else {})
+        return resp.json()
 
 
 class Pty:
