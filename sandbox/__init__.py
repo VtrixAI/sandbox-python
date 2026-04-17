@@ -23,6 +23,7 @@ Async::
 from .sandbox import Sandbox, AsyncSandbox
 from .filesystem import Filesystem, AsyncFilesystem
 from .commands import Commands, AsyncCommands, Pty, AsyncPty, CommandHandle, AsyncCommandHandle
+from .templates import TemplateClient, AsyncTemplateClient
 from .exceptions import (
     SandboxException,
     TimeoutException,
@@ -60,6 +61,8 @@ __all__ = [
     "AsyncPty",
     "CommandHandle",
     "AsyncCommandHandle",
+    "TemplateClient",
+    "AsyncTemplateClient",
     "SandboxException",
     "TimeoutException",
     "InvalidArgumentException",

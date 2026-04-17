@@ -525,9 +525,12 @@ class Filesystem:
                             try:
                                 import json as _json
                                 d = _json.loads(sse.data)
+                                fs = d.get("filesystem")
+                                if not fs:
+                                    continue
                                 ev = FilesystemEvent(
-                                    name=d.get("name", ""),
-                                    type=d.get("type", sse.event or ""),
+                                    name=fs.get("name", ""),
+                                    type=fs.get("type", ""),
                                 )
                                 event_queue.put(ev)
                             except Exception:
@@ -860,9 +863,12 @@ class AsyncFilesystem:
                             try:
                                 import json as _json
                                 d = _json.loads(sse.data)
+                                fs = d.get("filesystem")
+                                if not fs:
+                                    continue
                                 ev = FilesystemEvent(
-                                    name=d.get("name", ""),
-                                    type=d.get("type", sse.event or ""),
+                                    name=fs.get("name", ""),
+                                    type=fs.get("type", ""),
                                 )
                                 await event_queue.put(ev)
                             except Exception:

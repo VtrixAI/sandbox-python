@@ -504,6 +504,7 @@ def _build_start_body(
     timeout: Optional[float],
     pty_size: Optional[PtySize] = None,
     tag: Optional[str] = None,
+    stdin: bool = True,
 ) -> dict:
     """Build the JSON body for Process/Start."""
     process: dict = {
@@ -514,9 +515,11 @@ def _build_start_body(
         process["envs"] = envs
     if cwd:
         process["cwd"] = cwd
-    if tag:
-        process["tag"] = tag
     body: dict = {"process": process}
+    if tag:
+        body["tag"] = tag
+    if not stdin:
+        body["stdin"] = False
     if timeout is not None and timeout != 0:
         body["timeout"] = int(timeout)
     if pty_size is not None:
@@ -570,7 +573,7 @@ class Commands:
         :class:`CommandHandle` after the process has started.
         """
         url = self._url("process.Process/Start")
-        body = _build_start_body(cmd, envs, user, cwd, timeout, tag=tag)
+        body = _build_start_body(cmd, envs, user, cwd, timeout, tag=tag, stdin=stdin)
 
         stdout_parts: List[str] = []
         stderr_parts: List[str] = []
@@ -898,7 +901,7 @@ class AsyncCommands:
         tag: Optional[str] = None,
     ) -> Union[CommandResult, AsyncCommandHandle]:
         url = self._url("process.Process/Start")
-        body = _build_start_body(cmd, envs, user, cwd, timeout, tag=tag)
+        body = _build_start_body(cmd, envs, user, cwd, timeout, tag=tag, stdin=stdin)
 
         stdout_parts: List[str] = []
         stderr_parts: List[str] = []

@@ -154,7 +154,7 @@ class Sandbox:
                     "templateID": template,
                     "timeout": timeout,
                     "metadata": metadata or {},
-                    "envs": envs or {},
+                    "envVars": envs or {},
                 },
             )
             _raise_for_status(resp.status_code, resp.json() if resp.content else {})
@@ -235,7 +235,6 @@ class Sandbox:
             timeout=self._config.request_timeout,
         )
         _raise_for_status(resp.status_code, resp.json() if resp.content else {})
-        data = resp.json()
 
     def get_info(self) -> SandboxInfo:
         """Fetch current metadata for this sandbox."""
@@ -270,12 +269,36 @@ class Sandbox:
         Returns a dict with keys ``cpuUsedPct`` and ``memUsedMiB``.
         """
         resp = self._mgmt_client.get(
-            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/exec/metrics",
+            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/metrics",
             timeout=self._config.request_timeout,
         )
         _raise_for_status(resp.status_code, resp.json() if resp.content else {})
         data = resp.json()
         return data
+
+    def beta_pause(self) -> None:
+        """Pause (snapshot) the sandbox. Resume later with :meth:`connect`."""
+        resp = self._mgmt_client.post(
+            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/pause",
+            timeout=self._config.request_timeout,
+        )
+        _raise_for_status(resp.status_code, resp.json() if resp.content else {})
+
+    def refresh(self, duration: int = 0) -> None:
+        """Extend the sandbox lifetime.
+
+        *duration* is the number of seconds to add to the current TTL (max
+        3600).  If omitted the server uses its default.
+        """
+        body: dict = {}
+        if duration > 0:
+            body["duration"] = duration
+        resp = self._mgmt_client.post(
+            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/refreshes",
+            json=body,
+            timeout=self._config.request_timeout,
+        )
+        _raise_for_status(resp.status_code, resp.json() if resp.content else {})
 
     def resize_disk(self, size_mb: int) -> None:
         """Resize the sandbox disk to *size_mb* megabytes.
@@ -350,6 +373,20 @@ class Sandbox:
             client.close()
 
     @staticmethod
+    def list_metrics(api_key: Optional[str] = None, base_url: Optional[str] = None) -> List[dict]:
+        """Return CPU/memory metrics for all running sandboxes."""
+        key = _resolve_api_key(api_key)
+        url_base = _resolve_base_url(base_url)
+        client = httpx.Client(headers=_mgmt_headers(key), timeout=30.0)
+        try:
+            resp = client.get(url_base + "/api/v1/sandboxes/metrics")
+            _raise_for_status(resp.status_code, resp.json() if resp.content else {})
+            data = resp.json()
+            return data if isinstance(data, list) else []
+        finally:
+            client.close()
+
+    @staticmethod
     def kill_sandbox(sandbox_id: str, api_key: Optional[str] = None, base_url: Optional[str] = None) -> None:
         """Terminate the sandbox identified by *sandbox_id* without creating a Sandbox instance."""
         key = _resolve_api_key(api_key)
@@ -398,7 +435,7 @@ class Sandbox:
         url_base = _resolve_base_url(base_url)
         client = httpx.Client(headers=_mgmt_headers(key), timeout=30.0)
         try:
-            resp = client.get(url_base + "/api/v1/sandboxes/" + sandbox_id + "/exec/metrics")
+            resp = client.get(url_base + "/api/v1/sandboxes/" + sandbox_id + "/metrics")
             _raise_for_status(resp.status_code, resp.json() if resp.content else {})
             data = resp.json()
             return data
@@ -479,7 +516,7 @@ class AsyncSandbox:
                     "templateID": template,
                     "timeout": timeout,
                     "metadata": metadata or {},
-                    "envs": envs or {},
+                    "envVars": envs or {},
                 },
             )
             _raise_for_status(resp.status_code, resp.json() if resp.content else {})
@@ -588,11 +625,35 @@ class AsyncSandbox:
     async def get_metrics(self) -> dict:
         """Fetch current CPU and memory usage for the sandbox."""
         resp = await self._mgmt_client.get(
-            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/exec/metrics",
+            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/metrics",
             timeout=self._config.request_timeout,
         )
         _raise_for_status(resp.status_code, resp.json() if resp.content else {})
         return resp.json()
+
+    async def beta_pause(self) -> None:
+        """Pause (snapshot) the sandbox. Resume later with :meth:`connect`."""
+        resp = await self._mgmt_client.post(
+            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/pause",
+            timeout=self._config.request_timeout,
+        )
+        _raise_for_status(resp.status_code, resp.json() if resp.content else {})
+
+    async def refresh(self, duration: int = 0) -> None:
+        """Extend the sandbox lifetime.
+
+        *duration* is the number of seconds to add to the current TTL (max
+        3600).  If omitted the server uses its default.
+        """
+        body: dict = {}
+        if duration > 0:
+            body["duration"] = duration
+        resp = await self._mgmt_client.post(
+            self._config.base_url + "/api/v1/sandboxes/" + self._config.sandbox_id + "/refreshes",
+            json=body,
+            timeout=self._config.request_timeout,
+        )
+        _raise_for_status(resp.status_code, resp.json() if resp.content else {})
 
     async def resize_disk(self, size_mb: int) -> None:
         """Resize the sandbox disk to *size_mb* megabytes.
@@ -667,6 +728,20 @@ class AsyncSandbox:
             await client.aclose()
 
     @staticmethod
+    async def list_metrics(api_key: Optional[str] = None, base_url: Optional[str] = None) -> List[dict]:
+        """Return CPU/memory metrics for all running sandboxes."""
+        key = _resolve_api_key(api_key)
+        url_base = _resolve_base_url(base_url)
+        client = httpx.AsyncClient(headers=_mgmt_headers(key), timeout=30.0)
+        try:
+            resp = await client.get(url_base + "/api/v1/sandboxes/metrics")
+            _raise_for_status(resp.status_code, resp.json() if resp.content else {})
+            data = resp.json()
+            return data if isinstance(data, list) else []
+        finally:
+            await client.aclose()
+
+    @staticmethod
     async def kill_sandbox(sandbox_id: str, api_key: Optional[str] = None, base_url: Optional[str] = None) -> None:
         """Terminate the sandbox identified by *sandbox_id* without an instance."""
         key = _resolve_api_key(api_key)
@@ -714,7 +789,7 @@ class AsyncSandbox:
         url_base = _resolve_base_url(base_url)
         client = httpx.AsyncClient(headers=_mgmt_headers(key), timeout=30.0)
         try:
-            resp = await client.get(url_base + "/api/v1/sandboxes/" + sandbox_id + "/exec/metrics")
+            resp = await client.get(url_base + "/api/v1/sandboxes/" + sandbox_id + "/metrics")
             _raise_for_status(resp.status_code, resp.json() if resp.content else {})
             return resp.json()
         finally:
